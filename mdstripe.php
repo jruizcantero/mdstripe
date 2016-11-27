@@ -28,7 +28,7 @@ require_once dirname(__FILE__).'/vendor/autoload.php';
  */
 class MdStripe extends PaymentModule
 {
-    const MIN_PHP_VERSION = 50303;
+    const MIN_PHP_VERSION = 50400;
 
     const MENU_SETTINGS = 1;
     const MENU_TRANSACTIONS = 2;
@@ -92,6 +92,9 @@ class MdStripe extends PaymentModule
     public static $zeroDecimalCurrencies =
         array('bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'vdn', 'vuv', 'xaf', 'xof', 'xpf');
 
+    /** @var int $menu Current menu */
+    public $menu;
+
     /** @var array Hooks */
     public $hooks = array(
         'displayHeader',
@@ -100,11 +103,9 @@ class MdStripe extends PaymentModule
         'displayPaymentEU',
         'paymentOptions',
         'paymentReturn',
+        'displayPaymentTop',
         'displayAdminOrder',
     );
-
-    /** @var int $menu Current menu */
-    public $menu;
 
     /**
      * MDStripe constructor.
@@ -113,13 +114,13 @@ class MdStripe extends PaymentModule
     {
         $this->name = 'mdstripe';
         $this->tab = 'payments_gateways';
-        $this->version = '1.0.13';
+        $this->version = '1.0.12';
         $this->author = 'Mijn Presta';
         $this->need_instance = 1;
 
         $this->bootstrap = true;
 
-        $this->controllers = array('hook', 'validation', 'ajaxvalidation');
+        $this->controllers = array('hook', 'validation');
 
         $this->is_eu_compatible = 1;
         $this->currencies = true;
@@ -139,7 +140,7 @@ class MdStripe extends PaymentModule
                 return;
             }
             if (PHP_VERSION_ID < self::MIN_PHP_VERSION) {
-                $this->context->controller->errors[] = $this->displayName.': '.$this->l('Your PHP version is not supported. Please upgrade to PHP 5.3.3 or higher.');
+                $this->context->controller->errors[] = $this->displayName.': '.$this->l('Your PHP version is not supported. Please upgrade to PHP 5.4 or higher.');
                 $this->disable();
 
                 return;
@@ -163,7 +164,7 @@ class MdStripe extends PaymentModule
             return false;
         }
         if (PHP_VERSION_ID < self::MIN_PHP_VERSION) {
-            $this->addError($this->l('Your PHP version is not supported. Please upgrade to PHP 5.3.3 or higher.'));
+            $this->addError($this->l('Your PHP version is not supported. Please upgrade to PHP 5.4 or higher.'));
 
             return false;
         }
@@ -922,16 +923,16 @@ class MdStripe extends PaymentModule
                     }
                 }
             }
+        } else {
+            Configuration::updateValue(self::SECRET_KEY, $secretKey);
+            Configuration::updateValue(self::PUBLISHABLE_KEY, $publishableKey);
+            Configuration::updateValue(self::ZIPCODE, $zipcode);
+            Configuration::updateValue(self::BITCOIN, $bitcoin);
+            Configuration::updateValue(self::ALIPAY, $alipay);
+            Configuration::updateValue(self::SHOW_PAYMENT_LOGOS, $showPaymentLogos);
+            Configuration::updateValue(self::COLLECT_BILLING, $collectBilling);
+            Configuration::updateValue(self::COLLECT_SHIPPING, $collectShipping);
         }
-
-        Configuration::updateValue(self::SECRET_KEY, $secretKey);
-        Configuration::updateValue(self::PUBLISHABLE_KEY, $publishableKey);
-        Configuration::updateValue(self::ZIPCODE, $zipcode);
-        Configuration::updateValue(self::BITCOIN, $bitcoin);
-        Configuration::updateValue(self::ALIPAY, $alipay);
-        Configuration::updateValue(self::SHOW_PAYMENT_LOGOS, $showPaymentLogos);
-        Configuration::updateValue(self::COLLECT_BILLING, $collectBilling);
-        Configuration::updateValue(self::COLLECT_SHIPPING, $collectShipping);
     }
 
     /**
@@ -1002,14 +1003,14 @@ class MdStripe extends PaymentModule
                     }
                 }
             }
+        } else {
+            Configuration::updateValue(self::STATUS_VALIDATED, $statusValidated);
+            Configuration::updateValue(self::USE_STATUS_REFUND, $useStatusRefund);
+            Configuration::updateValue(self::STATUS_REFUND, $statusRefund);
+            Configuration::updateValue(self::USE_STATUS_PARTIAL_REFUND, $useStatusPartialRefund);
+            Configuration::updateValue(self::STATUS_PARTIAL_REFUND, $statusPartialRefund);
+            Configuration::updateValue(self::GENERATE_CREDIT_SLIP, $generateCreditSlip);
         }
-
-        Configuration::updateValue(self::STATUS_VALIDATED, $statusValidated);
-        Configuration::updateValue(self::USE_STATUS_REFUND, $useStatusRefund);
-        Configuration::updateValue(self::STATUS_REFUND, $statusRefund);
-        Configuration::updateValue(self::USE_STATUS_PARTIAL_REFUND, $useStatusPartialRefund);
-        Configuration::updateValue(self::STATUS_PARTIAL_REFUND, $statusPartialRefund);
-        Configuration::updateValue(self::GENERATE_CREDIT_SLIP, $generateCreditSlip);
     }
 
     /**
@@ -1040,9 +1041,9 @@ class MdStripe extends PaymentModule
                     }
                 }
             }
+        } else {
+            Configuration::updateValue(self::AUTO_UPDATE_PATCH, $autoUpdatePatch);
         }
-
-        Configuration::updateValue(self::AUTO_UPDATE_PATCH, $autoUpdatePatch);
     }
 
     /**
@@ -1199,31 +1200,20 @@ class MdStripe extends PaymentModule
             $stripeAmount = (int) ($stripeAmount * 100);
         }
 
-        $invoiceAddress = new Address((int) $cart->id_address_invoice);
-        $country = new Country($invoiceAddress->id_country);
-        $customer = new Customer($cart->id_customer);
-
         $autoplay = true;
         $this->context->smarty->assign(array(
-            'stripe_name' => $invoiceAddress->firstname.' '.$invoiceAddress->lastname,
             'stripe_email' => $stripeEmail,
             'stripe_currency' => $currency->iso_code,
-            'stripe_country' => Tools::strtoupper($country->iso_code),
             'stripe_amount' => $stripeAmount,
-            'stripe_amount_string' => (string) $cart->getOrderTotal(),
-            'stripe_amount_formatted' => Tools::displayPrice($cart->getOrderTotal(), Currency::getCurrencyInstance($cart->id_currency)),
             'id_cart' => (int) $cart->id,
             'stripe_secret_key' => Configuration::get(self::SECRET_KEY),
             'stripe_publishable_key' => Configuration::get(self::PUBLISHABLE_KEY),
             'stripe_locale' => self::getStripeLanguage($this->context->language->language_code),
             'stripe_zipcode' => (bool) Configuration::get(self::ZIPCODE),
-            'stripecc_zipcode' => (bool) Configuration::get(self::ZIPCODE),
             'stripe_bitcoin' => (bool) Configuration::get(self::BITCOIN) && Tools::strtolower($currency->iso_code) === 'usd',
             'stripe_alipay' => (bool) Configuration::get(self::ALIPAY),
             'stripe_shopname' => $this->context->shop->name,
-            'stripe_ajax_validation' => $link->getModuleLink($this->name, 'ajaxvalidation', array(), Tools::usingSecureMode()),
             'stripe_confirmation_page' => $link->getModuleLink($this->name, 'validation', array(), Tools::usingSecureMode()),
-            'stripe_ajax_confirmation_page' => $link->getPageLink('order-confirmation', Tools::usingSecureMode(), '&id_cart='.$cart->id.'&id_module='.$this->id.'&key='.$customer->secure_key),
             'showPaymentLogos' => Configuration::get(self::SHOW_PAYMENT_LOGOS),
             'stripeShopThumb' => str_replace('http://', 'https://', $this->context->link->getMediaLink('/modules/mdstripe/views/img/shop'.$this->getShopId().'.jpg')),
             'stripe_collect_billing' => Configuration::get(self::COLLECT_BILLING),
@@ -1235,7 +1225,7 @@ class MdStripe extends PaymentModule
             return $this->display(__FILE__, 'views/templates/front/eupayment.tpl');
         }
 
-        return $this->display(__FILE__, 'views/templates/hook/payment.tpl').$this->display(__FILE__, 'views/templates/hook/ccpayment.tpl');
+        return $this->display(__FILE__, 'views/templates/hook/payment.tpl');
     }
 
     /**
@@ -1351,10 +1341,7 @@ class MdStripe extends PaymentModule
             $stripeAmount = (int) ($stripeAmount * 100);
         }
 
-        $invoiceAddress = new Address((int) $cart->id_address_invoice);
-
         $this->context->smarty->assign(array(
-            'stripe_name' => $invoiceAddress->firstname.' '.$invoiceAddress->lastname,
             'stripe_email' => $stripeEmail,
             'stripe_currency' => $currency->iso_code,
             'stripe_amount' => $stripeAmount,
@@ -1363,7 +1350,6 @@ class MdStripe extends PaymentModule
             'stripe_publishable_key' => Configuration::get(self::PUBLISHABLE_KEY),
             'stripe_locale' => self::getStripeLanguage($this->context->language->language_code),
             'stripe_zipcode' => (bool) Configuration::get(self::ZIPCODE),
-            'stripecc_zipcode' => (bool) Configuration::get(self::ZIPCODE),
             'stripe_bitcoin' => (bool) Configuration::get(self::BITCOIN) && Tools::strtolower($currency->iso_code) === 'usd',
             'stripe_alipay' => (bool) Configuration::get(self::ALIPAY),
             'stripe_shopname' => $this->context->shop->name,
@@ -1440,21 +1426,52 @@ class MdStripe extends PaymentModule
      * @param array $params Hook parameters
      * @return string Hook HTML
      */
-    public function hookDisplayHeader($params)
+    public function hookDisplayPaymentTop($params)
     {
-        $this->context->controller->addJS($this->_path.'views/js/jquery.card.js');
-        $this->context->controller->addJS('https://checkout.stripe.com/checkout.js');
-        $this->context->controller->addJS('https://js.stripe.com/v2/');
-        $this->context->controller->addCSS($this->_path.'views/css/mdstripe-bootstrap.css', 'all');
-        $this->context->controller->addCSS($this->_path.'views/css/creditcard-embedded.css', 'all');
-        $this->context->controller->addCSS($this->_path.'views/css/simplespinner.css', 'all');
-        if (version_compare(_PS_VERSION_, '1.6.0.0', '>=')) {
-            $this->context->controller->addCSS($this->_path.'views/css/front.css', 'all');
-        } else {
-            $this->context->controller->addCSS($this->_path.'views/css/front15.css', 'all');
-        }
+		if (version_compare(_PS_VERSION_, '1.7.0.0', '>=')) {
+			$this->context->controller->registerJavascript('mdstripe-checkout', 'https://checkout.stripe.com/checkout.js');
+			$this->context->controller->registerStylesheet('mdstripe-front', $this->_path.'/views/css/front.css', ['media' => 'all', 'priority' => 80]);
+		}else{
+			$this->context->controller->addJS('https://checkout.stripe.com/checkout.js');
+			if (version_compare(_PS_VERSION_, '1.6.0.0', '>=')) {
+				$this->context->controller->addCSS($this->_path.'/views/css/front.css', 'all');
+			} else {
+				$this->context->controller->addCSS($this->_path.'/views/css/front15.css', 'all');
+			}
+		}
 
         return '';
+    }
+
+    /**
+     * Hook to header: <head></head>
+     *
+     * @param array $params Hook parameters
+     */
+    public function hookHeader($params)
+    {
+        $this->makeModuleTrusted();
+
+        if (Tools::getValue('module') === 'onepagecheckoutps' ||
+            Tools::getValue('controller') === 'order-opc' ||
+            Tools::getValue('controller') === 'orderopc' ||
+            Tools::getValue('controller') === 'order' ||
+            Tools::getValue('controller') === 'supercheckout') {
+			
+			if (version_compare(_PS_VERSION_, '1.7.0.0', '>=')) {
+				$this->context->controller->registerJavascript('mdstripe-checkout', 'https://checkout.stripe.com/checkout.js');
+				$this->context->controller->registerStylesheet('mdstripe-front', $this->_path.'/views/css/front.css', ['media' => 'all', 'priority' => 80]);
+			}else{	
+				$this->context->controller->addJS('https://checkout.stripe.com/checkout.js');
+				if (version_compare(_PS_VERSION_, '1.6.0.0', '>=')) {
+					$this->context->controller->addCSS($this->_path.'/views/css/front.css', 'all');
+				} else {
+					$this->context->controller->addCSS($this->_path.'/views/css/front15.css', 'all');
+				}
+				
+			}
+
+        }
     }
 
     /**
@@ -1478,9 +1495,14 @@ class MdStripe extends PaymentModule
     public function hookDisplayAdminOrder($params)
     {
         if (StripeTransaction::getTransactionsByOrderId($params['id_order'], true)) {
-            $this->context->controller->addJS($this->_path.'views/js/sweetalert.min.js');
-            $this->context->controller->addCSS($this->_path.'views/css/sweetalert.min.css', 'all');
-
+			if (version_compare(_PS_VERSION_, '1.7.0.0', '>=')) {
+				$this->context->controller->registerJavascript('mdstripe-sweetalert', $this->_path.'views/js/sweetalert.min.js');
+				$this->context->controller->registerStylesheet('mdstripe-sweetalert', $this->_path.'views/css/sweetalert.min.css', ['media' => 'all', 'priority' => 80]);
+			}else{
+				$this->context->controller->addJS($this->_path.'views/js/sweetalert.min.js');
+				$this->context->controller->addCSS($this->_path.'views/css/sweetalert.min.css', 'all');
+			}
+			
             $order = new Order($params['id_order']);
             $orderCurrency = new Currency($order->id_currency);
 
@@ -1510,42 +1532,6 @@ class MdStripe extends PaymentModule
         }
 
         return '';
-    }
-
-    /**
-     * Hook after module install
-     *
-     * @param Module $module
-     *
-     * @return void
-     */
-    public function hookActionModuleInstallAfter($module)
-    {
-        if (!isset($module->name) || empty($module->name)) {
-            return;
-        }
-
-        $hookHeaderId = (int) Hook::getIdByName('displayHeader');
-        $modulesWithControllers = Dispatcher::getModuleControllers('front');
-
-        if (isset($modulesWithControllers[$module->name])) {
-            foreach (Shop::getShops() as $shop) {
-                foreach ($modulesWithControllers[$module->name] as $cont) {
-                    Db::getInstance()->insert(
-                        'hook_module_exceptions',
-                        array(
-                            'id_module' => (int) $this->id,
-                            'id_hook' => (int) $hookHeaderId,
-                            'id_shop' => (int) $shop['id_shop'],
-                            'file_name' => pSQL($cont),
-                        ),
-                        false,
-                        true,
-                        Db::INSERT_IGNORE
-                    );
-                }
-            }
-        }
     }
 
     /**
@@ -2369,10 +2355,7 @@ class MdStripe extends PaymentModule
             return;
         }
         /** @var SimpleXMLElement $modules */
-        @$modules = $trustedXml->xpath('//modules');
-        if (!empty($modules)) {
-            $modules = $modules[0];
-        }
+        @$modules = $trustedXml->xpath('//modules')[0];
         if (empty($modules)) {
             return;
         }
@@ -2406,10 +2389,7 @@ class MdStripe extends PaymentModule
         }
         $highestPosition++;
         /** @var SimpleXMLElement $modules */
-        @$modules = $modulesTabXml->xpath('//tab[@class_name="AdminPayment"]');
-        if (!empty($modules)) {
-            $modules = $modules[0];
-        }
+        @$modules = $modulesTabXml->xpath('//tab[@class_name="AdminPayment"]')[0];
         if (empty($modules)) {
             return;
         }

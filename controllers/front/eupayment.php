@@ -56,10 +56,10 @@ class MdstripeEupaymentModuleFrontController extends ModuleFrontController
 
         parent::initContent();
         if (version_compare(_PS_VERSION_, '1.7.0.0', '>=')) {
-				$this->context->controller->registerJavascript('mdstripe-checkout', 'https://checkout.stripe.com/checkout.js');
-		}else{	
-			$this->context->controller->addJS('https://checkout.stripe.com/checkout.js');
-		}
+		$this->context->controller->registerJavascript('mdstripe-checkout', 'https://checkout.stripe.com/checkout.js');
+	}else{	
+		$this->context->controller->addJS('https://checkout.stripe.com/checkout.js');
+	}
 
         /** @var Cookie $email */
         $cookie = $this->context->cookie;
